@@ -79,3 +79,55 @@ proc print data=work.analysis (obs=10);
     var SIDO SIGUNGU FIRE_CNT POP_AVG_5YR FIRE_RATE_100K;
 run;
 
+/* ============================================================
+   2.1 데이터 탐색 - 기초 통계량 (평균 vs 중앙값으로 왜도 확인)
+   ============================================================ */
+proc means data=work.analysis n mean median std min max skew;
+    var FIRE_CNT DEATH_CNT INJURY_CNT DMG_TOTAL_SUM POP_AVG_5YR FIRE_RATE_100K;
+run;
+
+/* ============================================================
+   2.1-2 이상치 탐색 (PROC UNIVARIATE - 극단관측치 자동 출력)
+   ============================================================ */
+proc univariate data=work.analysis plot;
+    var FIRE_CNT DMG_TOTAL_SUM FIRE_RATE_100K;
+    id SIDO SIGUNGU; /* 이상치의 이름표를 달아주는 기능 */
+run;
+
+/* ============================================================
+   2.1-3 변수간 상관분석 (Spearman)
+   ============================================================ */
+proc corr data=work.analysis spearman;
+    var FIRE_CNT DEATH_CNT INJURY_CNT DMG_TOTAL_SUM POP_AVG_5YR FIRE_RATE_100K;
+run;
+
+/* ============================================================
+   2.1 데이터 탐색 결과 해석
+
+   [분포]
+   - FIRE_CNT(왜도1.40), INJURY_CNT(1.32) 중간 치우침
+   - DEATH_CNT(4.26), DMG_TOTAL_SUM(8.34) 심한 치우침
+   - FIRE_RATE_100K(0.77)는 인구 정규화만으로 왜도 대폭 감소, IQR 이상치 0개
+     -> 모델링은 FIRE_RATE_100K를 직접 종속변수로 쓰지 않고
+        FIRE_CNT를 종속변수, POP_AVG_5YR을 오프셋으로 쓰는 포아송/음이항 회귀로 진행 예정
+
+   [이상치]
+   - FIRE_CNT 상위 이상치(화성시,김해시,평택시,강남구 등) : 대도시/신도시 규모효과, 정상
+   - DMG_TOTAL_SUM 이상치 26건(전체 10%) : 이천시 최댓값(5,710억)은
+     2021년 대형 물류센터 화재 단일사건(약 4,743억, 83%)이 대부분 -> 드문 대형사고에 좌우
+
+   [상관분석]
+   - FIRE_CNT - POP_AVG_5YR : 0.771 (규모효과)
+   - POP_AVG_5YR - FIRE_RATE_100K : -0.794 (비율의 분모와의 상관 -> 일부 계산구조상 발생, 해석 주의)
+   - DMG_TOTAL_SUM - FIRE_RATE_100K : 0.076, 비유의(p=0.23) -> 피해액은 발생빈도와 무관
+
+   [변수 역할 정리]
+   - DEATH_CNT, INJURY_CNT, DMG_TOTAL_SUM : 화재의 결과 -> 예측변수 제외, 종속변수 후보로 보류
+   - POP_AVG_5YR : 예측변수가 아니라 오프셋(노출량)
+   ============================================================ */
+
+
+
+
+
+ 
