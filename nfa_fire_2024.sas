@@ -139,4 +139,45 @@ proc import datafile="/home/u63652680/NFA/fire_clean_for_sas.csv"
     guessingrows=max;
 run;
 
- 
+data work.fire_dedup2;
+    set work.fire_raw2;
+run;
+proc sort data=work.fire_dedup2 nodupkey; by _all_; run;
+
+proc sql;
+    create table work.deriv as
+    select SIDO, SIGUNGU,
+           mean(case when CAUSE_L = '부주의' then 1 else 0 end) as CARELESS_RATIO format=6.4,
+           mean(case when PLACE_L = '주거' then 1 else 0 end) as RESIDENTIAL_RATIO format=6.4,
+           mean(case when FIRE_MONTH in (12,1,2) then 1 else 0 end) as WINTER_RATIO format=6.4
+    from work.fire_dedup2
+    group by SIDO, SIGUNGU;
+quit;
+
+proc sql;
+    create table work.analysis2 as
+    select a.*, d.CARELESS_RATIO, d.RESIDENTIAL_RATIO, d.WINTER_RATIO
+    from work.analysis as a
+    left join work.deriv as d
+    on a.SIDO = d.SIDO and a.SIGUNGU = d.SIGUNGU;
+quit;
+
+proc means data=work.analysis2 n nmiss mean std min max;
+    var CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO;
+run;
+
+/* ============================================================
+   2.3 파생변수 결과 해석
+
+   - 부주의화재비율 평균(47.46%), 주거시설화재비율 평균(27.53%)이
+     전국 비율(47.5%, 27.3%)과 근접 -> 계산 검증됨
+     (단, describe 평균은 시군구 단순평균, 전국비율은 건수 가중평균으로 계산방식 다름)
+
+   - 동절기화재비율 표준편차(0.029)가 다른 두 변수(0.087,0.085)보다 훨씬 작음
+     -> 계절성은 전국적으로 균일, 지역간 설명력은 약할 가능성 -> 회귀 유의성 확인 필요
+
+   - 부주의화재비율 최저: 울릉군(7.0%, 5년 43건으로 표본 최소)
+     -> 표본이 작아 비율 추정이 불안정할 가능성, 대신 전기적요인(46.5%)/미상(37.2%) 높음
+   - 부주의화재비율 최고: 보성군/남해군/순창군/하동군(전남경남 농촌, 60~70%)
+     -> 농촌지역 소각 관련 부주의화재 패턴과 일치, 정책적 의미 있는 패턴으로 판단
+   ============================================================ */
