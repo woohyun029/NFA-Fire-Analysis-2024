@@ -126,8 +126,17 @@ run;
    - POP_AVG_5YR : 예측변수가 아니라 오프셋(노출량)
    ============================================================ */
 
+/* ============================================================
+   2.3 파생변수 생성 - 원인·장소·계절 구성비
+   (guessingrows=max로 재import 필요 - FIRE_MONTH 컬럼 추가됨)
+   ============================================================ */
 
-
-
+proc import datafile="/home/u63652680/NFA/fire_clean_for_sas.csv"
+    out=work.fire_raw2
+    dbms=csv
+    replace;
+    getnames=yes;
+    guessingrows=max;
+run;
 
  
