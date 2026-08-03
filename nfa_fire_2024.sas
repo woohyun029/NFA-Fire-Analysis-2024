@@ -181,3 +181,89 @@ run;
    - 부주의화재비율 최고: 보성군/남해군/순창군/하동군(전남경남 농촌, 60~70%)
      -> 농촌지역 소각 관련 부주의화재 패턴과 일치, 정책적 의미 있는 패턴으로 판단
    ============================================================ */
+  
+/* ============================================================
+   2.4 다중공선성 점검 (상관분석 + VIF)
+   ============================================================ */
+proc corr data=work.analysis2 spearman;
+    var CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO POP_AVG_5YR;
+run;
+
+/* VIF는 종속변수가 무엇이든 예측변수 구조만으로 계산되므로 FIRE_CNT를 임시로 사용 */
+proc reg data=work.analysis2;
+    model FIRE_CNT = CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO POP_AVG_5YR / vif tol;
+run;
+quit;
+
+/* ============================================================
+   2.4~2.5 다중공선성 점검 및 최종 변수선택
+
+   [VIF] 전부 1.07~1.23 -> 기준선(5,10) 미달, 다중공선성 없음, 제거변수 없음
+   [상관] 예측변수간 최대 0.365 (RESIDENTIAL_RATIO ~ POP_AVG_5YR)
+
+   [참고] VIF 산출용 OLS에서 WINTER_RATIO p=0.1021 비유의
+          -> 2.3의 "지역간 변동 작아 설명력 약할 것" 예상과 일치
+          -> 단 카운트데이터에 부적합한 모델이므로 계수해석 보류,
+             최종 판단은 4단계 포아송/음이항 회귀에서
+
+   [최종 변수 확정]
+     종속변수  : FIRE_CNT
+     오프셋    : POP_AVG_5YR
+     예측변수  : CARELESS_RATIO, RESIDENTIAL_RATIO, WINTER_RATIO
+     분석제외  : DEATH_CNT, INJURY_CNT, DMG_TOTAL_SUM (화재의 결과변수)
+   ============================================================ */
+  
+/* ============================================================
+   3.1 정규성 검정 (normal 옵션 -> Shapiro-Wilk 등 출력)
+   ============================================================ */
+proc univariate data=work.analysis2 normal;
+    var FIRE_CNT FIRE_RATE_100K;
+run;
+
+/* ============================================================
+   3.2 지역유형 파생 (군 / 시·구)
+   한글 마지막 글자 판별은 DBCS 대응 K함수(ksubstr, klength) 사용
+   ============================================================ */
+data work.analysis3;
+    set work.analysis2;
+    length REGION_TYPE $6;
+    if ksubstr(strip(SIGUNGU), klength(strip(SIGUNGU)), 1) = '군'
+        then REGION_TYPE = 'GUN';
+        else REGION_TYPE = 'SI_GU';
+run;
+
+/* 검증: GUN 83 / SI_GU 171 이어야 정상 (Python 결과와 대조) */
+proc freq data=work.analysis3;
+    tables REGION_TYPE;
+run;
+
+/* ============================================================
+   3.2-2 군 vs 시·구 화재발생율 차이 (Wilcoxon 2-sample = Mann-Whitney U)
+   ============================================================ */
+proc npar1way data=work.analysis3 wilcoxon;
+    class REGION_TYPE;
+    var FIRE_RATE_100K;
+run;
+
+/* ============================================================
+   3.3 시도별 화재발생율 차이 (Kruskal-Wallis)
+   NPAR1WAY는 그룹이 3개 이상이면 자동으로 Kruskal-Wallis를 출력한다
+   ============================================================ */
+proc npar1way data=work.analysis3 wilcoxon;
+    class SIDO;
+    var FIRE_RATE_100K;
+run;
+
+/* ============================================================
+   3.4 발화요인 × 장소 독립성 검정 (카이제곱 + Cramer's V)
+   ============================================================ */
+proc freq data=work.fire_dedup2;
+    tables CAUSE_L * PLACE_L / chisq norow nocol nopercent;
+run;
+
+/* ============================================================
+   3.5 과산포 확인 (분산/평균 비율)
+   ============================================================ */
+proc means data=work.analysis3 mean var;
+    var FIRE_CNT;
+run;
