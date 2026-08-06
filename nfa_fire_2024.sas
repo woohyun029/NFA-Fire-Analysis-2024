@@ -326,3 +326,63 @@ proc genmod data=work.model_data;
     model FIRE_CNT = CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO
           / dist=negbin link=log offset=LOG_POP;
 run;
+
+/* ============================================================
+   4단계 모델링 결과 해석
+
+   [4.1 과산포 진단]
+     포아송 : Deviance/DF=125.1582, Pearson/DF=145.9384, AIC=33403.4
+     음이항 : Deviance/DF=1.0563,  Pearson/DF=1.0751,  AIC=3634.6
+     -> 포아송 부적합(표준오차 과소추정), 음이항 채택 (AIC 29,769 감소)
+     -> Dispersion=0.2107 (p<.0001), 포아송(alpha=0) 기각 근거
+     -> 3.5의 244.70과 다른 이유: 오프셋으로 인구규모 효과 제거됨
+
+   [4.2 계수 해석 - 변화단위 주의]
+     변수              계수      SD      10%p RR    1SD RR
+     CARELESS_RATIO    2.4736  0.0866   1.281      1.239 (+23.9%)
+     RESIDENTIAL_RATIO -4.5923 0.0855   0.632      0.675 (-32.5%)
+     WINTER_RATIO       5.9452 0.0287   1.812      1.186 (+18.6%)
+
+     -> WINTER_RATIO는 SD가 0.0287로 작아 10%p = 3.49SD의 비현실적 외삽
+        1SD 기준 재계산시 영향력 순위 역전:
+        RESIDENTIAL > CARELESS > WINTER
+     -> 2.3에서 예상한 "동절기 변동 작아 설명력 약함"이 확인됨
+
+   [4.3 방향 해석]
+     CARELESS_RATIO(+) : 부주의 비중 높은 지역일수록 인구당 발생율 높음 (3.2~3.3과 일치)
+     RESIDENTIAL_RATIO(-) : 구성비 변수 특성. 군 주거22.0%/임야8.5% vs 시구 주거28.6%/임야2.5%
+        -> "주거가 안전"이 아니라 "도시성 대리변수"로 해석해야 함
+     구성비 변수는 합이 1로 묶여있어(compositional) 독립적 인과효과로 읽으면 안 됨
+
+   [4.4 한계] Pseudo R2=0.047로 낮음. 산업구조/건축노후도/소방인프라 등 미포함
+              관측된 연관성이며 인과관계 아님
+   ============================================================ */
+  
+/* ============================================================
+   4.5 모델 진단 - 잔차 분석
+   output문으로 예측값(PRED)과 피어슨잔차(RESCHI)를 데이터셋으로 저장
+   ============================================================ */
+proc genmod data=work.model_data;
+    model FIRE_CNT = CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO
+          / dist=negbin link=log offset=LOG_POP;
+    output out=work.negbin_out pred=PRED reschi=RESCHI resdev=RESDEV;
+run;
+
+proc sort data=work.negbin_out out=work.resid_sorted;
+    by descending RESCHI;
+run;
+
+/* 예측보다 화재가 많은 지역 TOP 10 */
+proc print data=work.resid_sorted (obs=10);
+    var SIDO SIGUNGU FIRE_CNT PRED RESCHI FIRE_RATE_100K;
+run;
+
+/* 예측보다 화재가 적은 지역 TOP 10 */
+proc sort data=work.negbin_out out=work.resid_asc; by RESCHI; run;
+proc print data=work.resid_asc (obs=10);
+    var SIDO SIGUNGU FIRE_CNT PRED RESCHI FIRE_RATE_100K;
+run;
+
+proc means data=work.negbin_out mean std min max;
+    var RESCHI;
+run;
