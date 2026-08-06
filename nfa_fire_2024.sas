@@ -386,3 +386,67 @@ run;
 proc means data=work.negbin_out mean std min max;
     var RESCHI;
 run;
+
+/* ============================================================
+   4.5 모델 진단 결과 해석
+
+   [전반적 적합도] 잔차 평균 0.0043, SD 1.0307 -> 이상적(0,1)에 근접
+                   |잔차|>3 : 254개 중 2개(양구군 3.75, 청송군 3.71), 0.8%
+
+   [잔차 비대칭] 최대 +3.75 vs 최소 -1.82
+     -> 모델 결함 아닌 구조적 특성. 화재건수는 0 미만 불가하므로
+        예측값 큰 지역의 피어슨잔차 하한 = -1/sqrt(alpha) = -1/sqrt(0.2107) = -2.18
+        위쪽은 상한 없어 꼬리가 길다. 상하위 대칭 비교 금물
+
+   [!! 발견된 문제 - 지역유형별 체계적 편향]
+     군지역(n=83)   잔차평균 +0.975
+     시구지역(n=171) 잔차평균 -0.467
+     -> 예측초과 TOP10 전부 군, 예측미달 TOP10 전부 시구
+     -> 세 변수 통제 후에도 농촌 화재를 체계적으로 과소예측
+     -> 전체 평균 0.0043이 양호해 보인 건 두 그룹 편향이 상쇄된 결과
+        전체지표만 보면 놓침, 그룹별로 쪼개야 드러남
+     -> 시도별로도 강원+0.788/충남+0.618 vs 세종-1.478/울산-0.942 동일 방향
+
+   [원인 추정] 군 임야화재 8.5% vs 시구 2.5%
+              농촌 야외·임야화재 미반영 = 누락변수 문제로 판단 -> 4.6에서 개선
+   ============================================================ */
+  
+/* ============================================================
+   4.6 모델 개선 - 누락변수 추가
+   (임야화재비율은 Python에서 파생 후 CSV로 재업로드하거나,
+    PROC SQL로 fire_dedup2에서 동일하게 계산)
+   ============================================================ */
+proc sql;
+    create table work.deriv2 as
+    select SIDO, SIGUNGU,
+           mean(case when PLACE_L = '임야' then 1 else 0 end) as FOREST_RATIO format=6.4
+    from work.fire_dedup2
+    group by SIDO, SIGUNGU;
+quit;
+
+data work.model_data2;
+    merge work.model_data (in=a) work.deriv2;
+    by SIDO SIGUNGU;
+    if a;
+    GUN = (REGION_TYPE = 'GUN');
+run;
+proc sort data=work.model_data; by SIDO SIGUNGU; run;
+proc sort data=work.deriv2;      by SIDO SIGUNGU; run;
+
+/* 모델 A: 임야화재비율 추가 */
+proc genmod data=work.model_data2;
+    model FIRE_CNT = CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO FOREST_RATIO
+          / dist=negbin link=log offset=LOG_POP;
+    output out=work.out_a reschi=RESCHI_A;
+run;
+
+/* 모델 B: 군지역 더미 추가 */
+proc genmod data=work.model_data2;
+    model FIRE_CNT = CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO GUN
+          / dist=negbin link=log offset=LOG_POP;
+    output out=work.out_b reschi=RESCHI_B;
+run;
+
+/* 편향 해소 여부 확인 - 두 그룹 평균이 0에 가까워야 개선된 것 */
+proc means data=work.out_a mean; class REGION_TYPE; var RESCHI_A; run;
+proc means data=work.out_b mean; class REGION_TYPE; var RESCHI_B; run;
