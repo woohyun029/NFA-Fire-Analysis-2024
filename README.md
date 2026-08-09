@@ -37,7 +37,11 @@
 
 초기에는 군 vs 시·구 이분법으로 접근해 군지역 2.13배라는 결과를 얻었으나, **잔차 진단에서 도농복합시(공주시·상주시·문경시 등)가 체계적으로 과소예측**되는 것을 발견하고 3분류로 재설정했습니다. 재적합 결과 세 그룹의 잔차 편향이 모두 해소되었고 (구 +0.002 / 군 +0.003 / 시 +0.002), AIC 3,459.6 → 3,426.9, Pearson χ²/DF 1.0355 → 1.0024로 개선되었습니다.
 
+<img width="1800" height="750" alt="02_residual_comparison" src="https://github.com/user-attachments/assets/92ee99d6-4ac7-4648-80fc-babce2082573" />
+
 ### 2. 같은 '부주의'라도 지역별 내용이 다르다
+
+<img width="1350" height="825" alt="03_careless_by_region" src="https://github.com/user-attachments/assets/f289295d-ce1d-471d-b47d-dfd2bfb25651" />
 
 전체 화재의 47.4%가 부주의 원인이며, 세부 내용은 지역유형에 따라 뚜렷하게 갈립니다.
 
