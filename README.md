@@ -25,9 +25,7 @@
 
 ### 1. 화재 발생율은 도시성에 따라 단계적으로 증가
 
-### 1. 화재 발생율은 도시성에 따라 단계적으로 증가
-
-![지역유형별 화재발생율](outputs/01_fire_rate_by_region.png)
+<img width="1050" height="750" alt="01_fire_rate_by_region" src="https://github.com/user-attachments/assets/6521966f-2260-4deb-b4d4-cdbe42bda896" />
 
 화재 원인·장소·계절 구성을 모두 통제한 뒤의 인구당 발생율비입니다.
 
