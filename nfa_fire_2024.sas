@@ -490,3 +490,66 @@ proc means data=work.out_b mean; class REGION_TYPE; var RESCHI_B; run;
      시도별 충남+0.701/경북+0.568 vs 울산-1.015/대구-0.800
      공간적 자기상관 가능성 있으나 인접정보 필요 -> 범위 밖, 한계로 기록
    ============================================================ */
+  
+/* ============================================================
+   5.1 AS-IS 현황 지표
+   ============================================================ */
+proc genmod data=work.model_data2;
+    model FIRE_CNT = CARELESS_RATIO RESIDENTIAL_RATIO WINTER_RATIO GUN
+          / dist=negbin link=log offset=LOG_POP;
+    output out=work.final_out pred=PRED reschi=RESID;
+run;
+
+data work.final_out;
+    set work.final_out;
+    EXCESS = FIRE_CNT - PRED;
+run;
+
+proc means data=work.final_out sum median;
+    class REGION_TYPE;
+    var FIRE_CNT DEATH_CNT INJURY_CNT FIRE_RATE_100K;
+run;
+
+/* ============================================================
+   5.2 개입 우선순위 지역 (잔차 기준 / 초과건수 기준)
+   ============================================================ */
+proc sort data=work.final_out out=work.by_resid;   by descending RESID;  run;
+proc print data=work.by_resid (obs=10);
+    var SIDO SIGUNGU REGION_TYPE FIRE_CNT PRED EXCESS RESID;
+run;
+
+proc sort data=work.final_out out=work.by_excess;  by descending EXCESS; run;
+proc print data=work.by_excess (obs=10);
+    var SIDO SIGUNGU REGION_TYPE FIRE_CNT PRED EXCESS RESID;
+run;
+
+/* ============================================================
+   5.3 부주의 화재 소분류 - 지역유형별 구성비
+   ============================================================ */
+data work.careless;
+    set work.fire_dedup2;
+    if CAUSE_L = '부주의';
+    length REGION_TYPE $6;
+    if ksubstr(strip(SIGUNGU), klength(strip(SIGUNGU)), 1) = '군'
+        then REGION_TYPE = 'GUN'; else REGION_TYPE = 'SI_GU';
+run;
+
+proc freq data=work.careless;
+    tables REGION_TYPE * CAUSE_S / nocol nopercent;
+run;
+
+/* ============================================================
+   5.4 군/시/구 3분류 잔차 재확인 (이분법의 한계 점검)
+   ============================================================ */
+data work.final_cat;
+    set work.final_out;
+    length REGION_CAT $4;
+    if ksubstr(strip(SIGUNGU), klength(strip(SIGUNGU)), 1) = '군' then REGION_CAT = 'GUN';
+    else if ksubstr(strip(SIGUNGU), klength(strip(SIGUNGU)), 1) = '구' then REGION_CAT = 'GU';
+    else REGION_CAT = 'SI';
+run;
+
+proc means data=work.final_cat n mean median;
+    class REGION_CAT;
+    var RESID;
+run;
